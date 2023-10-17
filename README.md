@@ -7,7 +7,7 @@ When a client connects they're presented a customisable menu and they can select
 [Docker Hub](https://hub.docker.com/r/marrold/viewdata-gateway)  
 [Github](https://github.com/cu-telecom/viewdata-gateway)
 
-<img src="viewdata-gateway.png" width="200">
+<img src="viewdata-gateway.png" width="400">
 
 ## Configuration
 
