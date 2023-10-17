@@ -196,17 +196,16 @@ async def handle_client(reader, writer):
     while True:  # Keep the outer loop for displaying the menu again
         attempts = 0
         max_attempts = 3
-        while attempts < max_attempts:
+        garbage = 0
+        max_garbage = 10
+
+        while attempts < max_attempts and garbage < max_garbage:
             choice_data = await reader.read(1)
             if choice_data.isdigit():
                 choice = int(choice_data.decode().strip())
                 backend = config['backend_servers'].get(choice)
                 if backend:
                     print(f"{client_address} selected #{choice_data.decode('utf-8')}. Attempting to connect to {backend['host']}:{backend['port']}")
-                    # writer.write(b"\x0c")
-                    # status_message = await insert_menu_status(menu, "\x1B\x48\x1B\x41Connecting...")
-                    # writer.write(status_message.encode())
-                    # await writer.drain()
                     break
                 else:
                     print(f"{client_address} entered an invalid choice: {choice_data.decode('utf-8')}")
@@ -216,10 +215,11 @@ async def handle_client(reader, writer):
                     await writer.drain()
                     attempts += 1
             else:
-                print(f"{client_address} sent non-numeric character: {choice_data}")
-                # attempts += 1
+                garbage += 1
+                print(f"{client_address} sent non-numeric character: {choice_data} garbage: {garbage}")
 
-        if attempts == max_attempts:
+
+        if attempts >= max_attempts or garbage >= max_garbage:
             print(f"{client_address} failed too many attempts. Disconnecting")
             writer.write(b"\x0c")
             status_message = await insert_menu_status(menu, "\x1B\x48\x1B\x41Too many failed attempts. Goodbye")
@@ -229,7 +229,7 @@ async def handle_client(reader, writer):
             return
 
         try:
-            backend_reader, backend_writer = await asyncio.open_connection(backend['host'], backend['port'])
+            backend_reader, backend_writer = await asyncio.wait_for(asyncio.open_connection(backend['host'], backend['port']), timeout=3)
         except:
             print(f"{client_address} couldn't connect to service #{choice_data.decode('utf-8')} {backend['host']}:{backend['port']}")
             writer.write(b"\x0c")
