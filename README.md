@@ -4,10 +4,10 @@ This is a simple and lightweight Viewdata Gateway that allows a client to connec
 
 When a client connects they're presented a customisable menu and they can select from   up to 10 viewdata services. They enter the number of the service they wish to connect to and the connection is then proxied to the service.
 
-[Docker Hub](https://hub.docker.com/r/marrold/viewdata-gateway)
+[Docker Hub](https://hub.docker.com/r/marrold/viewdata-gateway)  
 [Github](https://github.com/cu-telecom/viewdata-gateway)
 
-![viewdata-gateway-example](./viewdata-gateway.png)
+![viewdata-gateway-example](./viewdata-gateway.png | width=200)
 
 ## Configuration
 
