@@ -229,9 +229,9 @@ async def handle_client(reader, writer):
             return
 
         try:
-            backend_reader, backend_writer = await asyncio.wait_for(asyncio.open_connection(backend['host'], backend['port']), timeout=3)
-        except:
-            print(f"{client_address} couldn't connect to service #{choice_data.decode('utf-8')} {backend['host']}:{backend['port']}")
+            backend_reader, backend_writer = await asyncio.wait_for(asyncio.open_connection(backend['host'], backend['port']), timeout=20)
+        except Exception as e:
+            print(f"{client_address} couldn't connect to service #{choice_data.decode('utf-8')} {backend['host']}:{backend['port']} - {e}")
             writer.write(b"\x0c")
             status_message = await insert_menu_status(menu, "\x1B\x48\x1B\x41Connection failed. Try another")
             writer.write(status_message.encode())
