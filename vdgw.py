@@ -152,15 +152,20 @@ def pad_row(text):
 
 
 def with_status_row(rows, text):
-    """Returns a copy of rows with row 22 (index 21) replaced by an (error) status message."""
+    """Returns a copy of rows with row 22 (index 21) replaced by an (error) status message, styled the same as the page indicator bar."""
     updated = list(rows)
-    updated[FRAME_ROWS - 1] = pad_row(text)
+    updated[FRAME_ROWS - 1] = build_status_bar(text)
     return updated
 
 
 def build_status_bar(text):
     """A full-width, right-justified row on a blue background with yellow text."""
-    justified = text[:ROW_WIDTH].rjust(ROW_WIDTH)
+    # The 3 leading attribute codes (blue fg, new background, yellow fg) are
+    # invisible but each still occupies one screen cell, so the text only
+    # gets the remaining width - otherwise the row runs to 43 cells and the
+    # tail wraps onto the next line.
+    available = ROW_WIDTH - 3
+    justified = text[:available].rjust(available)
     return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{justified}"
 
 
@@ -372,7 +377,7 @@ async def serve_client(reader, writer, client_address):
                 else:
                     logger.info("%s entered an invalid choice: %s", client_address, choice)
                     writer.write(b"\x0c")
-                    writer.write(render_frame(with_status_row(pages[current_page], "\x1B\x48\x1B\x41Invalid Choice. Try again")))
+                    writer.write(render_frame(with_status_row(pages[current_page], "Invalid Choice. Try again")))
                     await writer.drain()
                     attempts += 1
                 continue
@@ -391,7 +396,7 @@ async def serve_client(reader, writer, client_address):
         if not backend:
             logger.info("%s failed too many attempts. Disconnecting", client_address)
             writer.write(b"\x0c")
-            writer.write(render_frame(with_status_row(pages[current_page], "\x1B\x48\x1B\x41Too many failed attempts. Goodbye")))
+            writer.write(render_frame(with_status_row(pages[current_page], "Too many failed attempts. Goodbye")))
             await writer.drain()
             return
 
@@ -401,7 +406,7 @@ async def serve_client(reader, writer, client_address):
         except (OSError, asyncio.TimeoutError) as e:
             logger.warning("%s couldn't connect to %s:%s - %s", client_address, backend['host'], backend['port'], e)
             writer.write(b"\x0c")
-            writer.write(render_frame(with_status_row(pages[current_page], "\x1B\x48\x1B\x41Connection failed. Try another")))
+            writer.write(render_frame(with_status_row(pages[current_page], "Connection failed. Try another")))
             await writer.drain()
             continue
 
