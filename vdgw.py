@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import signal
 import sys
 from datetime import datetime, timezone
@@ -12,6 +13,9 @@ logger = logging.getLogger("vdgw")
 BRIDGE_CHUNK_SIZE = 4096
 DEFAULT_MAX_CONNECTIONS = 100
 DEFAULT_CHOICE_TIMEOUT = 120  # seconds a client has to pick a menu option / send a byte
+DEFAULT_BANNER_ROWS = 10
+ROW_WIDTH = 40
+FRAME_ROWS = 22  # usable rows per frame; row 22 (index 21) is always reserved for status messages
 
 # Minimal Telnet (RFC 854) option negotiation, for clients that speak telnet
 # before falling back to raw Viewdata bytes. We don't support any options, so
@@ -27,12 +31,10 @@ TELNET_REFUSAL = {TELNET_WILL: TELNET_DONT, TELNET_DO: TELNET_WONT}
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
 def edittf_decode(data, row_begin=1, row_end=22, column_begin=0, column_end=39, trim_ends=True):
     """
-    Decodes the selected portion of edit.tf data into Prestel format, returns a string.
-    :param row_begin:
-    :param row_end:
-    :param column_start:
-    :param column_end:
-    :return:
+    Decodes the selected portion of edit.tf data into Prestel format.
+    Returns a list with one entry per requested row; each entry already carries
+    its own trailing '\\r\\n' when the row is narrower than the requested width
+    (a full-width row is left as-is, since the terminal wraps on its own).
     """
 
     # col start must be < col end and row begin < row end etc.
@@ -43,7 +45,6 @@ def edittf_decode(data, row_begin=1, row_end=22, column_begin=0, column_end=39, 
     raw_data = parse_edittf_url(data)
     cols_to_take = column_end - column_begin + 1
 
-    # result goes here
     rows_out = []
 
     # Teletext is 25 lines, Prestel/Telstar is 24, in addition line 0 is reserved for the Telstar header
@@ -71,13 +72,16 @@ def edittf_decode(data, row_begin=1, row_end=22, column_begin=0, column_end=39, 
                 chars.append(chr(asc))
             else:
                 chars.append(chr(asc))
-        rows_out.append(''.join(chars))
+
+        content = ''.join(chars)
 
         # as rstrip is used for each row, the row could be shorter than the requested width
         if len(row) < cols_to_take:
-            rows_out.append('\r\n')
+            content += '\r\n'
 
-    return ''.join(rows_out)
+        rows_out.append(content)
+
+    return rows_out
 
 
 # Decodes the url returning raw teletext data
@@ -125,27 +129,73 @@ def parse_edittf_url(encoded_url):
     return ''.join([chr(n) for n in decoded_data])
 
 
-def insert_menu_status(original: str, ascii_str: str) -> str:
+def pad_row(text):
+    """Truncates to the row width and appends a line-end unless the row is full width."""
+    text = text[:ROW_WIDTH]
+    if len(text) < ROW_WIDTH:
+        return text + '\r\n'
+    return text
 
-    # Split the original data by the newline character to get individual rows
-    rows = original.split('\x0A')
 
-    # Pad with empty rows if needed
-    while len(rows) < 22:
-        rows.append('')
+def with_status_row(rows, text):
+    """Returns a copy of rows with row 22 (index 21) replaced by a status message."""
+    updated = list(rows)
+    updated[FRAME_ROWS - 1] = pad_row(text)
+    return updated
 
-    # Ensure that the ASCII string doesn't exceed the expected row width (40 characters)
-    ascii_str = ascii_str[:40]
 
-    # Replace or insert content into row 23
-    if len(rows) >= 22:
-        rows[21] = ascii_str
+def render_frame(rows):
+    return ''.join(rows).encode()
+
+
+def build_pages(banner, backends, banner_row_count):
+    """
+    Builds one complete 22-row frame per page: the banner rows, followed by an
+    auto-generated list of backends for that page (digit-labelled), a "# More"
+    footer when there's more than one page, blank padding, and a placeholder
+    row for status messages.
+
+    Returns (pages, page_backends) - pages[i] is a ready-to-send list of 22
+    row strings, page_backends[i] is the list of backend dicts selectable by
+    digit on that page.
+    """
+    list_row_count = (FRAME_ROWS - 1) - banner_row_count  # rows available below the banner, above the status row
+    if list_row_count < 1:
+        logger.error("banner_rows (%s) leaves no room for the backend list", banner_row_count)
+        sys.exit(1)
+
+    total = len(backends)
+    max_per_page = min(10, list_row_count)
+
+    if total <= max_per_page:
+        entries_per_page = total if total > 0 else 1
+        show_footer = False
     else:
-        rows.append(ascii_str)
+        entries_per_page = min(10, list_row_count - 1)
+        show_footer = True
 
-    # Reconstruct the data
-    updated_binary = '\x0A'.join(rows)
-    return updated_binary
+    num_pages = max(1, math.ceil(total / entries_per_page)) if total > 0 else 1
+
+    pages = []
+    page_backends = []
+    for page_index in range(num_pages):
+        group = backends[page_index * entries_per_page:(page_index + 1) * entries_per_page]
+        page_backends.append(group)
+
+        rows = list(banner)
+        for digit, backend in enumerate(group):
+            rows.append(pad_row(f"{digit} {backend['name']}"))
+
+        blank_rows_needed = list_row_count - len(group) - (1 if show_footer else 0)
+        rows.extend(pad_row('') for _ in range(blank_rows_needed))
+
+        if show_footer:
+            rows.append(pad_row("# More options"))
+
+        rows.append(pad_row(''))  # placeholder for the status row (row 22)
+        pages.append(rows)
+
+    return pages, page_backends
 
 
 def load_config(path="config.yaml"):
@@ -156,20 +206,28 @@ def load_config(path="config.yaml"):
         logger.error("Couldn't load %s: %s", path, e)
         sys.exit(1)
 
-    for required in ("listening_port", "menu_url", "backend_servers"):
+    for required in ("listening_port", "banner_url", "backend_servers"):
         if required not in cfg:
             logger.error("%s is missing required key '%s'", path, required)
             sys.exit(1)
+
+    for entry in cfg["backend_servers"]:
+        for field in ("name", "host", "port"):
+            if field not in entry:
+                logger.error("%s: backend_servers entry missing '%s': %r", path, field, entry)
+                sys.exit(1)
 
     return cfg
 
 
 config = load_config()
 
-# The menu is decoded once at startup rather than per-connection, since it never
-# changes at runtime and decoding it is pure CPU work with no benefit to redoing
-# it for every client.
-menu = edittf_decode(config["menu_url"])
+# The banner is decoded and the pages are built once at startup rather than
+# per-connection, since none of it changes at runtime and it's pure CPU work
+# with no benefit to redoing it for every client.
+banner_row_count = config.get("banner_rows", DEFAULT_BANNER_ROWS)
+banner = edittf_decode(config["banner_url"], row_begin=1, row_end=banner_row_count)
+pages, page_backends = build_pages(banner, config["backend_servers"], banner_row_count)
 
 max_connections = config.get("max_connections", DEFAULT_MAX_CONNECTIONS)
 choice_timeout = config.get("choice_timeout", DEFAULT_CHOICE_TIMEOUT)
@@ -222,8 +280,10 @@ async def handle_client(reader, writer):
 
 
 async def serve_client(reader, writer, client_address):
+    current_page = 0
+
     writer.write(b"\x0c" + generate_date_string().encode() + b"\x0c")
-    writer.write(menu.encode())
+    writer.write(render_frame(pages[current_page]))
     await writer.drain()
 
     while True:  # Keep the outer loop for displaying the menu again
@@ -259,17 +319,25 @@ async def serve_client(reader, writer, client_address):
                     await writer.drain()
                 continue
 
+            if choice_data == b'#':
+                current_page = (current_page + 1) % len(pages)
+                logger.info("%s moved to menu page %s/%s", client_address, current_page + 1, len(pages))
+                writer.write(b"\x0c")
+                writer.write(render_frame(pages[current_page]))
+                await writer.drain()
+                continue
+
             if choice_data.isdigit():
                 choice = int(choice_data.decode())
-                backend = config['backend_servers'].get(choice)
+                backends_here = page_backends[current_page]
+                backend = backends_here[choice] if choice < len(backends_here) else None
                 if backend:
                     logger.info("%s selected #%s, connecting to %s:%s", client_address, choice, backend['host'], backend['port'])
                     break
                 else:
                     logger.info("%s entered an invalid choice: %s", client_address, choice)
                     writer.write(b"\x0c")
-                    status_message = insert_menu_status(menu, "\x1B\x48\x1B\x41Invalid Choice. Try again")
-                    writer.write(status_message.encode())
+                    writer.write(render_frame(with_status_row(pages[current_page], "\x1B\x48\x1B\x41Invalid Choice. Try again")))
                     await writer.drain()
                     attempts += 1
             else:
@@ -279,8 +347,7 @@ async def serve_client(reader, writer, client_address):
         if not backend:
             logger.info("%s failed too many attempts. Disconnecting", client_address)
             writer.write(b"\x0c")
-            status_message = insert_menu_status(menu, "\x1B\x48\x1B\x41Too many failed attempts. Goodbye")
-            writer.write(status_message.encode())
+            writer.write(render_frame(with_status_row(pages[current_page], "\x1B\x48\x1B\x41Too many failed attempts. Goodbye")))
             await writer.drain()
             return
 
@@ -290,8 +357,7 @@ async def serve_client(reader, writer, client_address):
         except (OSError, asyncio.TimeoutError) as e:
             logger.warning("%s couldn't connect to %s:%s - %s", client_address, backend['host'], backend['port'], e)
             writer.write(b"\x0c")
-            status_message = insert_menu_status(menu, "\x1B\x48\x1B\x41Connection failed. Try another")
-            writer.write(status_message.encode())
+            writer.write(render_frame(with_status_row(pages[current_page], "\x1B\x48\x1B\x41Connection failed. Try another")))
             await writer.drain()
             continue
 
@@ -321,7 +387,7 @@ async def main():
         loop.add_signal_handler(sig, stop_event.set)
 
     server = await asyncio.start_server(handle_client, '0.0.0.0', config['listening_port'])
-    logger.info("Listening on port %s (max_connections=%s)", config['listening_port'], max_connections)
+    logger.info("Listening on port %s (max_connections=%s, pages=%s)", config['listening_port'], max_connections, len(pages))
 
     async with server:
         await stop_event.wait()
