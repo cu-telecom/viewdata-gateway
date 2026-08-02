@@ -29,7 +29,9 @@ TELNET_REFUSAL = {TELNET_WILL: TELNET_DONT, TELNET_DO: TELNET_WONT}
 
 # Viewdata/Prestel alphanumeric colour codes (ESC + code + 0x40)
 COLOUR_YELLOW = "\x1B\x43"
+COLOUR_BLUE = "\x1B\x44"
 COLOUR_WHITE = "\x1B\x47"
+NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was set just before it
 
 # Real Viewdata terminals don't use plain ASCII: the physical "#" (hash) key
 # transmits 0x5F, and displaying ASCII 0x23 renders as something else ("$" on
@@ -37,7 +39,7 @@ COLOUR_WHITE = "\x1B\x47"
 # both input and display, so it's used for both here.
 HASH_BYTE = b'\x5f'
 HASH_CHAR = '\x5f'
-MAX_DIGIT_BUFFER = 4  # no page ever has more than 10 entries, so anything longer is noise
+MAX_DIGIT_BUFFER = 4  # generous headroom above any realistic backend count
 
 
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
@@ -150,10 +152,16 @@ def pad_row(text):
 
 
 def with_status_row(rows, text):
-    """Returns a copy of rows with row 22 (index 21) replaced by a status message."""
+    """Returns a copy of rows with row 22 (index 21) replaced by an (error) status message."""
     updated = list(rows)
     updated[FRAME_ROWS - 1] = pad_row(text)
     return updated
+
+
+def build_status_bar(text):
+    """A full-width, right-justified row on a blue background with yellow text."""
+    justified = text[:ROW_WIDTH].rjust(ROW_WIDTH)
+    return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{justified}"
 
 
 def render_frame(rows):
@@ -163,14 +171,20 @@ def render_frame(rows):
 def build_pages(banner, backends, banner_row_count):
     """
     Builds one complete 22-row frame per page: the banner rows, followed by an
-    auto-generated list of backends for that page ("N) name"), a blank line
+    auto-generated list of backends ("N) name") numbered globally and
+    continuously across all pages (not restarting at each page), a blank line
     and a "# More options" footer when there's more than one page, blank
-    padding, and a status row (row 22) that shows a "Page X of Y" indicator
-    by default - or an error message, when with_status_row() overrides it.
+    padding, and a status bar (row 22) that shows a right-justified "Page X of
+    Y" indicator by default - or an error message, when with_status_row()
+    overrides it.
 
-    Returns (pages, page_backends) - pages[i] is a ready-to-send list of 22
-    row strings, page_backends[i] is the list of backend dicts selectable by
-    digit on that page.
+    Because numbering is global, a client can type a number they saw on a
+    different page (e.g. "15") and it resolves correctly regardless of which
+    page is currently on screen - see the global `backend_servers` lookup in
+    serve_client, which indexes the full list directly rather than a
+    per-page slice.
+
+    Returns pages - pages[i] is a ready-to-send list of 22 row strings.
     """
     list_row_count = (FRAME_ROWS - 1) - banner_row_count  # rows available below the banner, above the status row
     if list_row_count < 1:
@@ -178,28 +192,27 @@ def build_pages(banner, backends, banner_row_count):
         sys.exit(1)
 
     total = len(backends)
-    max_per_page = min(10, list_row_count)
 
-    if total <= max_per_page:
+    if total <= list_row_count:
         entries_per_page = total if total > 0 else 1
         show_footer = False
     else:
         # reserve a blank spacer row plus the footer row itself
-        entries_per_page = max(1, min(10, list_row_count - 2))
+        entries_per_page = max(1, list_row_count - 2)
         show_footer = True
 
     num_pages = max(1, math.ceil(total / entries_per_page)) if total > 0 else 1
 
     pages = []
-    page_backends = []
     for page_index in range(num_pages):
-        group = backends[page_index * entries_per_page:(page_index + 1) * entries_per_page]
-        page_backends.append(group)
+        start = page_index * entries_per_page
+        group = backends[start:start + entries_per_page]
 
         rows = list(banner)
-        for digit, backend in enumerate(group):
-            colour = COLOUR_YELLOW if digit % 2 == 0 else COLOUR_WHITE
-            rows.append(pad_row(f"{colour}{digit}) {backend['name']}"))
+        for offset, backend in enumerate(group):
+            global_index = start + offset
+            colour = COLOUR_YELLOW if global_index % 2 == 0 else COLOUR_WHITE
+            rows.append(pad_row(f"{colour}{global_index}) {backend['name']}"))
 
         blank_rows_needed = list_row_count - len(group) - (2 if show_footer else 0)
         rows.extend(pad_row('') for _ in range(max(0, blank_rows_needed)))
@@ -209,12 +222,12 @@ def build_pages(banner, backends, banner_row_count):
             rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR} More options"))
 
         if num_pages > 1:
-            rows.append(pad_row(f"{COLOUR_WHITE}Page {page_index + 1} of {num_pages}"))
+            rows.append(build_status_bar(f"Page {page_index + 1} of {num_pages}"))
         else:
             rows.append(pad_row(''))  # status row (row 22), overwritten by with_status_row when needed
         pages.append(rows)
 
-    return pages, page_backends
+    return pages
 
 
 def load_config(path="config.yaml"):
@@ -246,7 +259,8 @@ config = load_config()
 # with no benefit to redoing it for every client.
 banner_row_count = config.get("banner_rows", DEFAULT_BANNER_ROWS)
 banner = edittf_decode(config["banner_url"], row_begin=1, row_end=banner_row_count)
-pages, page_backends = build_pages(banner, config["backend_servers"], banner_row_count)
+all_backends = config["backend_servers"]
+pages = build_pages(banner, all_backends, banner_row_count)
 
 max_connections = config.get("max_connections", DEFAULT_MAX_CONNECTIONS)
 choice_timeout = config.get("choice_timeout", DEFAULT_CHOICE_TIMEOUT)
@@ -351,8 +365,7 @@ async def serve_client(reader, writer, client_address):
 
                 choice = int(digit_buffer)
                 digit_buffer = ""
-                backends_here = page_backends[current_page]
-                backend = backends_here[choice] if choice < len(backends_here) else None
+                backend = all_backends[choice] if 0 <= choice < len(all_backends) else None
                 if backend:
                     logger.info("%s selected #%s, connecting to %s:%s", client_address, choice, backend['host'], backend['port'])
                     break
