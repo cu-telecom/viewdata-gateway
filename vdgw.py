@@ -29,6 +29,7 @@ TELNET_DONT = 0xFE
 TELNET_REFUSAL = {TELNET_WILL: TELNET_DONT, TELNET_DO: TELNET_WONT}
 
 # Viewdata/Prestel alphanumeric colour codes (ESC + code + 0x40)
+COLOUR_GREEN = "\x1B\x42"
 COLOUR_YELLOW = "\x1B\x43"
 COLOUR_BLUE = "\x1B\x44"
 COLOUR_WHITE = "\x1B\x47"
@@ -159,20 +160,37 @@ def with_status_row(rows, text):
     return updated
 
 
-def build_status_bar(text):
-    """A full-width, centred row on a blue background with yellow text."""
-    # The 3 leading attribute codes (blue fg, new background, yellow fg) are
-    # invisible but each still occupies one screen cell. They only ever sit
-    # on the left, so naively centring the text within the remaining 37
-    # cells biases it 1.5 cells right of the true row centre - the left
-    # padding needs to be 3 cells shorter than the right to compensate.
-    available = ROW_WIDTH - 3
+def center_in_row(text, invisible_cells):
+    """
+    Centres `text` within a full ROW_WIDTH-cell row that's preceded by
+    `invisible_cells` attribute-code cells (colour codes etc). Those cells
+    show nothing but still occupy screen space and always sit on the left,
+    so naively centring within the remaining visible cells biases the text
+    right of the true row centre - the left padding needs to be shorter than
+    the right by `invisible_cells` to compensate.
+    """
+    available = ROW_WIDTH - invisible_cells
     text = text[:available]
     total_gap = available - len(text)
-    left_gap = max(0, (total_gap - 3) // 2)
+    left_gap = max(0, (total_gap - invisible_cells) // 2)
     right_gap = total_gap - left_gap
-    centred = (' ' * left_gap) + text + (' ' * right_gap)
+    return (' ' * left_gap) + text + (' ' * right_gap)
+
+
+def build_status_bar(text):
+    """A full-width, centred row on a blue background with yellow text."""
+    centred = center_in_row(text, invisible_cells=3)  # blue fg, new background, yellow fg
     return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{centred}"
+
+
+def build_connecting_frame():
+    """A blank frame with "CONNECTING" in green, centred on the page, shown while dialling a backend."""
+    rows = [pad_row('') for _ in range(FRAME_ROWS)]
+    middle_row = FRAME_ROWS // 2
+    centred = center_in_row("CONNECTING", invisible_cells=1)  # green fg
+    rows[middle_row] = f"{COLOUR_GREEN}{centred}"  # exactly full width - no line-end needed
+    rows.append(pad_row(''))  # status row
+    return rows
 
 
 def render_frame(rows):
@@ -272,6 +290,7 @@ banner_row_count = config.get("banner_rows", DEFAULT_BANNER_ROWS)
 banner = edittf_decode(config["banner_url"], row_begin=1, row_end=banner_row_count)
 all_backends = config["backend_servers"]
 pages = build_pages(banner, all_backends, banner_row_count)
+connecting_frame = render_frame(build_connecting_frame())
 
 max_connections = config.get("max_connections", DEFAULT_MAX_CONNECTIONS)
 choice_timeout = config.get("choice_timeout", DEFAULT_CHOICE_TIMEOUT)
@@ -405,6 +424,10 @@ async def serve_client(reader, writer, client_address):
             writer.write(render_frame(with_status_row(pages[current_page], "Too many failed attempts. Goodbye")))
             await writer.drain()
             return
+
+        writer.write(b"\x0c")
+        writer.write(connecting_frame)
+        await writer.drain()
 
         try:
             backend_reader, backend_writer = await asyncio.wait_for(
