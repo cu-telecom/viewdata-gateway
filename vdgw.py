@@ -13,6 +13,16 @@ BRIDGE_CHUNK_SIZE = 4096
 DEFAULT_MAX_CONNECTIONS = 100
 DEFAULT_CHOICE_TIMEOUT = 120  # seconds a client has to pick a menu option / send a byte
 
+# Minimal Telnet (RFC 854) option negotiation, for clients that speak telnet
+# before falling back to raw Viewdata bytes. We don't support any options, so
+# every WILL/DO is met with a flat refusal; WONT/DONT need no reply.
+TELNET_IAC = 0xFF
+TELNET_WILL = 0xFB
+TELNET_WONT = 0xFC
+TELNET_DO = 0xFD
+TELNET_DONT = 0xFE
+TELNET_REFUSAL = {TELNET_WILL: TELNET_DONT, TELNET_DO: TELNET_WONT}
+
 
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
 def edittf_decode(data, row_begin=1, row_end=22, column_begin=0, column_end=39, trim_ends=True):
@@ -234,6 +244,20 @@ async def serve_client(reader, writer, client_address):
             if not choice_data:
                 logger.info("%s disconnected while at the menu", client_address)
                 return
+
+            if choice_data[0] == TELNET_IAC:
+                try:
+                    command = await asyncio.wait_for(reader.readexactly(2), timeout=choice_timeout)
+                except (asyncio.TimeoutError, asyncio.IncompleteReadError):
+                    logger.info("%s disconnected during telnet negotiation", client_address)
+                    return
+
+                cmd, option = command[0], command[1]
+                reply = TELNET_REFUSAL.get(cmd)
+                if reply is not None:
+                    writer.write(bytes([TELNET_IAC, reply, option]))
+                    await writer.drain()
+                continue
 
             if choice_data.isdigit():
                 choice = int(choice_data.decode())
