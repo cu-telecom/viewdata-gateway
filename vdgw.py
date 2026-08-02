@@ -162,11 +162,16 @@ def with_status_row(rows, text):
 def build_status_bar(text):
     """A full-width, centred row on a blue background with yellow text."""
     # The 3 leading attribute codes (blue fg, new background, yellow fg) are
-    # invisible but each still occupies one screen cell, so the text only
-    # gets the remaining width - otherwise the row runs to 43 cells and the
-    # tail wraps onto the next line.
+    # invisible but each still occupies one screen cell. They only ever sit
+    # on the left, so naively centring the text within the remaining 37
+    # cells biases it 1.5 cells right of the true row centre - the left
+    # padding needs to be 3 cells shorter than the right to compensate.
     available = ROW_WIDTH - 3
-    centred = text[:available].center(available)
+    text = text[:available]
+    total_gap = available - len(text)
+    left_gap = max(0, (total_gap - 3) // 2)
+    right_gap = total_gap - left_gap
+    centred = (' ' * left_gap) + text + (' ' * right_gap)
     return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{centred}"
 
 
@@ -179,7 +184,7 @@ def build_pages(banner, backends, banner_row_count):
     Builds one complete frame per page: 22 content rows (the banner, followed
     by an auto-generated list of backends ("N) name") numbered globally and
     continuously across all pages - not restarting at each page - a blank
-    line and a "# More options" footer when there's more than one page, and
+    line and a "Press # for more options" footer when there's more than one page, and
     blank padding), plus one further status bar row below them that shows a
     centred "Page X of Y" indicator by default - or an error message,
     when with_status_row() overrides it.
@@ -225,7 +230,7 @@ def build_pages(banner, backends, banner_row_count):
 
         if show_footer:
             rows.append(pad_row(''))  # spacer before the footer
-            rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR} More options"))
+            rows.append(pad_row(f"{COLOUR_WHITE}Press {HASH_CHAR} for more options"))
 
         if num_pages > 1:
             rows.append(build_status_bar(f"Page {page_index + 1} of {num_pages}"))
