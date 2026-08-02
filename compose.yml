@@ -1,0 +1,9 @@
+services:
+  viewdata-gateway:
+    build: .
+    image: marrold/viewdata-gateway:dev
+    restart: unless-stopped
+    ports:
+      - "6502:6502"
+    volumes:
+      - ./config.yaml:/usr/src/app/config.yaml:ro

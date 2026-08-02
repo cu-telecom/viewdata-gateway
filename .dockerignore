@@ -1,0 +1,6 @@
+.git
+*.swp
+__pycache__
+*.pyc
+README.md
+viewdata-gateway.png
