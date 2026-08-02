@@ -15,7 +15,8 @@ DEFAULT_MAX_CONNECTIONS = 100
 DEFAULT_CHOICE_TIMEOUT = 120  # seconds a client has to pick a menu option / send a byte
 DEFAULT_BANNER_ROWS = 10
 ROW_WIDTH = 40
-FRAME_ROWS = 22  # usable rows per frame; row 22 (index 21) is always reserved for status messages
+FRAME_ROWS = 22  # usable content rows per frame (banner + auto-generated list)
+STATUS_ROW_INDEX = FRAME_ROWS  # status bar sits on its own line, just below the 22 content rows
 
 # Minimal Telnet (RFC 854) option negotiation, for clients that speak telnet
 # before falling back to raw Viewdata bytes. We don't support any options, so
@@ -152,21 +153,21 @@ def pad_row(text):
 
 
 def with_status_row(rows, text):
-    """Returns a copy of rows with row 22 (index 21) replaced by an (error) status message, styled the same as the page indicator bar."""
+    """Returns a copy of rows with the status row replaced by an (error) message, styled the same as the page indicator bar."""
     updated = list(rows)
-    updated[FRAME_ROWS - 1] = build_status_bar(text)
+    updated[STATUS_ROW_INDEX] = build_status_bar(text)
     return updated
 
 
 def build_status_bar(text):
-    """A full-width, right-justified row on a blue background with yellow text."""
+    """A full-width, centred row on a blue background with yellow text."""
     # The 3 leading attribute codes (blue fg, new background, yellow fg) are
     # invisible but each still occupies one screen cell, so the text only
     # gets the remaining width - otherwise the row runs to 43 cells and the
     # tail wraps onto the next line.
     available = ROW_WIDTH - 3
-    justified = text[:available].rjust(available)
-    return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{justified}"
+    centred = text[:available].center(available)
+    return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{centred}"
 
 
 def render_frame(rows):
@@ -175,13 +176,13 @@ def render_frame(rows):
 
 def build_pages(banner, backends, banner_row_count):
     """
-    Builds one complete 22-row frame per page: the banner rows, followed by an
-    auto-generated list of backends ("N) name") numbered globally and
-    continuously across all pages (not restarting at each page), a blank line
-    and a "# More options" footer when there's more than one page, blank
-    padding, and a status bar (row 22) that shows a right-justified "Page X of
-    Y" indicator by default - or an error message, when with_status_row()
-    overrides it.
+    Builds one complete frame per page: 22 content rows (the banner, followed
+    by an auto-generated list of backends ("N) name") numbered globally and
+    continuously across all pages - not restarting at each page - a blank
+    line and a "# More options" footer when there's more than one page, and
+    blank padding), plus one further status bar row below them that shows a
+    centred "Page X of Y" indicator by default - or an error message,
+    when with_status_row() overrides it.
 
     Because numbering is global, a client can type a number they saw on a
     different page (e.g. "15") and it resolves correctly regardless of which
@@ -189,9 +190,9 @@ def build_pages(banner, backends, banner_row_count):
     serve_client, which indexes the full list directly rather than a
     per-page slice.
 
-    Returns pages - pages[i] is a ready-to-send list of 22 row strings.
+    Returns pages - pages[i] is a ready-to-send list of FRAME_ROWS + 1 row strings.
     """
-    list_row_count = (FRAME_ROWS - 1) - banner_row_count  # rows available below the banner, above the status row
+    list_row_count = FRAME_ROWS - banner_row_count  # rows available below the banner, within the 22 content rows
     if list_row_count < 1:
         logger.error("banner_rows (%s) leaves no room for the backend list", banner_row_count)
         sys.exit(1)
