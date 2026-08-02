@@ -163,9 +163,10 @@ def render_frame(rows):
 def build_pages(banner, backends, banner_row_count):
     """
     Builds one complete 22-row frame per page: the banner rows, followed by an
-    auto-generated list of backends for that page (digit-labelled), a "# More"
-    footer when there's more than one page, blank padding, and a placeholder
-    row for status messages.
+    auto-generated list of backends for that page ("N) name"), a blank line
+    and a "# More options" footer when there's more than one page, blank
+    padding, and a status row (row 22) that shows a "Page X of Y" indicator
+    by default - or an error message, when with_status_row() overrides it.
 
     Returns (pages, page_backends) - pages[i] is a ready-to-send list of 22
     row strings, page_backends[i] is the list of backend dicts selectable by
@@ -183,7 +184,8 @@ def build_pages(banner, backends, banner_row_count):
         entries_per_page = total if total > 0 else 1
         show_footer = False
     else:
-        entries_per_page = min(10, list_row_count - 1)
+        # reserve a blank spacer row plus the footer row itself
+        entries_per_page = max(1, min(10, list_row_count - 2))
         show_footer = True
 
     num_pages = max(1, math.ceil(total / entries_per_page)) if total > 0 else 1
@@ -197,15 +199,19 @@ def build_pages(banner, backends, banner_row_count):
         rows = list(banner)
         for digit, backend in enumerate(group):
             colour = COLOUR_YELLOW if digit % 2 == 0 else COLOUR_WHITE
-            rows.append(pad_row(f"{colour}{digit} {backend['name']}"))
+            rows.append(pad_row(f"{colour}{digit}) {backend['name']}"))
 
-        blank_rows_needed = list_row_count - len(group) - (1 if show_footer else 0)
-        rows.extend(pad_row('') for _ in range(blank_rows_needed))
+        blank_rows_needed = list_row_count - len(group) - (2 if show_footer else 0)
+        rows.extend(pad_row('') for _ in range(max(0, blank_rows_needed)))
 
         if show_footer:
+            rows.append(pad_row(''))  # spacer before the footer
             rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR} More options"))
 
-        rows.append(pad_row(''))  # placeholder for the status row (row 22)
+        if num_pages > 1:
+            rows.append(pad_row(f"{COLOUR_WHITE}Page {page_index + 1} of {num_pages}"))
+        else:
+            rows.append(pad_row(''))  # status row (row 22), overwritten by with_status_row when needed
         pages.append(rows)
 
     return pages, page_backends
