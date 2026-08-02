@@ -11,7 +11,7 @@ choice_timeout: 120
 # A link to a page designed in the ZXNet or edit.tf editor. Only the top
 # `banner_rows` rows are used - design it as a logo/header, and leave the
 # rest of the page blank, since the backend list below it is auto-generated.
-banner_url: https://zxnet.co.uk/teletext/editor/#0:QIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECAkoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoUKCn9elQIEC_-v1P0v9AgQf16VAgQf0CBAgQIECBAgQIECBAgKf0CD_qaoP6DU9Sf0CBB_wMP-tr_R6ubX_o1Nf-tr_9NUCAp_-NP_5qg_oNX1p_-IEH_41_62v_5q-tP_781_62vz81QICShQoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECALTy7MuPogwoOeXl2048qDpvQY9-7dlx9EHTe6QIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQMFKCpl2c-mHkgQIECBAgQIECBAgQIECBAgQIECBAgQIECAGxUoIu7Ig35kHTRlQTNO7KgQIECBAgQIECBAgQIECBAgQIEDJSgqZenLDj0bN_Lfty9NGHdlQKIcPY0UoFqCdTjV0CBAgBs1KCpoyoJ2nPo6IJ_fYgWoKGHl0QdNO3KsQc8uVAqXIECBA0UoJ1jpl2IECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIAbVSgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQNlKBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECAG3UoECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIEDhSgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgBuVKBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIA1Tegz5eiDzv68kHPLy7aceVBhyZMuRB03oOmjKg2aefRAgDY9-7phx9EHbTl75MPTDAx9emXYu3ZeiBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIEBI:PS=0:RE=0:zx=NJ0
+banner_url: https://zxnet.co.uk/teletext/editor/#0:QIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECAkoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoUKCn9elQIEC_-v1P0v9AgQf16VAgQf0CBAgQIECBAgQIECBAgKf0CD_qaoP6DU9Sf0CBB_wMP-tr_R6ubX_o1Nf-tr_9NUCAp_-NP_5qg_oNX1p_-IEH_41_62v_5q-tP_781_62vz81QICShQoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoUKFChQoQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECANU3oM-Xog87-vJBzy8u2nHlQYcmTLkQdN6DpoyoNmnn0QIA2Pfu6YcfRB205e-TD0wwMfXpl2Lt2XogQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECBAgQIECA:PS=0:RE=0:zx=HL00
 
 # Number of rows (from the top) the banner occupies. The remaining rows
 # (up to row 21) are used for the auto-generated backend list, and row 22
@@ -23,7 +23,7 @@ banner_rows: 10
 # one page, a "# More options" footer appears and pressing # cycles through
 # the remaining pages (wrapping back to the first after the last).
 backend_servers:
-  - name: GlassTTY
+  - name: Telstar
     host: glasstty.com
     port: 6502
   - name: End of the Line BBS
@@ -38,4 +38,39 @@ backend_servers:
   - name: NXtel
     host: nx.nxtel.org
     port: 23280
-
+  - name: CCL4
+    host: fish.ccl4.org
+    port: 23
+  - name: Night Owl BBS
+    host: nightowlbbs.ddns.net
+    port: 6400
+  - name: NXtel
+    host: nx.nxtel.org
+    port: 23280
+  - name: one
+    host: nx.nxtel.org
+    port: 23280
+  - name: two
+    host: nx.nxtel.org
+    port: 23280
+  - name: three
+    host: nx.nxtel.org
+    port: 23280
+  - name: four
+    host: nx.nxtel.org
+    port: 23280
+  - name: five
+    host: nx.nxtel.org
+    port: 23280
+  - name: six
+    host: nx.nxtel.org
+    port: 23280
+  - name: seven
+    host: nx.nxtel.org
+    port: 23280
+  - name: eight
+    host: nx.nxtel.org
+    port: 23280
+  - name: nine
+    host: example.org
+    port: 23280

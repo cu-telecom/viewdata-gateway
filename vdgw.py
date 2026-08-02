@@ -27,6 +27,18 @@ TELNET_DO = 0xFD
 TELNET_DONT = 0xFE
 TELNET_REFUSAL = {TELNET_WILL: TELNET_DONT, TELNET_DO: TELNET_WONT}
 
+# Viewdata/Prestel alphanumeric colour codes (ESC + code + 0x40)
+COLOUR_YELLOW = "\x1B\x43"
+COLOUR_WHITE = "\x1B\x47"
+
+# Real Viewdata terminals don't use plain ASCII: the physical "#" (hash) key
+# transmits 0x5F, and displaying ASCII 0x23 renders as something else ("$" on
+# at least one real client) rather than a hash. 0x5F round-trips correctly on
+# both input and display, so it's used for both here.
+HASH_BYTE = b'\x5f'
+HASH_CHAR = '\x5f'
+MAX_DIGIT_BUFFER = 4  # no page ever has more than 10 entries, so anything longer is noise
+
 
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
 def edittf_decode(data, row_begin=1, row_end=22, column_begin=0, column_end=39, trim_ends=True):
@@ -184,13 +196,14 @@ def build_pages(banner, backends, banner_row_count):
 
         rows = list(banner)
         for digit, backend in enumerate(group):
-            rows.append(pad_row(f"{digit} {backend['name']}"))
+            colour = COLOUR_YELLOW if digit % 2 == 0 else COLOUR_WHITE
+            rows.append(pad_row(f"{colour}{digit} {backend['name']}"))
 
         blank_rows_needed = list_row_count - len(group) - (1 if show_footer else 0)
         rows.extend(pad_row('') for _ in range(blank_rows_needed))
 
         if show_footer:
-            rows.append(pad_row("# More options"))
+            rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR} More options"))
 
         rows.append(pad_row(''))  # placeholder for the status row (row 22)
         pages.append(rows)
@@ -293,6 +306,7 @@ async def serve_client(reader, writer, client_address):
         max_garbage = 10
         backend = None
         choice_data = b""
+        digit_buffer = ""
 
         while attempts < max_attempts and garbage < max_garbage:
             try:
@@ -319,16 +333,18 @@ async def serve_client(reader, writer, client_address):
                     await writer.drain()
                 continue
 
-            if choice_data == b'#':
-                current_page = (current_page + 1) % len(pages)
-                logger.info("%s moved to menu page %s/%s", client_address, current_page + 1, len(pages))
-                writer.write(b"\x0c")
-                writer.write(render_frame(pages[current_page]))
-                await writer.drain()
-                continue
+            if choice_data == HASH_BYTE:
+                if not digit_buffer:
+                    # Hash with nothing typed first means "show the next page"
+                    current_page = (current_page + 1) % len(pages)
+                    logger.info("%s moved to menu page %s/%s", client_address, current_page + 1, len(pages))
+                    writer.write(b"\x0c")
+                    writer.write(render_frame(pages[current_page]))
+                    await writer.drain()
+                    continue
 
-            if choice_data.isdigit():
-                choice = int(choice_data.decode())
+                choice = int(digit_buffer)
+                digit_buffer = ""
                 backends_here = page_backends[current_page]
                 backend = backends_here[choice] if choice < len(backends_here) else None
                 if backend:
@@ -340,9 +356,18 @@ async def serve_client(reader, writer, client_address):
                     writer.write(render_frame(with_status_row(pages[current_page], "\x1B\x48\x1B\x41Invalid Choice. Try again")))
                     await writer.drain()
                     attempts += 1
-            else:
-                garbage += 1
-                logger.info("%s sent non-numeric character: %s garbage: %s", client_address, choice_data, garbage)
+                continue
+
+            if choice_data.isdigit():
+                digit_buffer += choice_data.decode()
+                if len(digit_buffer) > MAX_DIGIT_BUFFER:
+                    digit_buffer = ""
+                    garbage += 1
+                    logger.info("%s sent too many digits without a hash, discarding: garbage: %s", client_address, garbage)
+                continue
+
+            garbage += 1
+            logger.info("%s sent non-numeric character: %s garbage: %s", client_address, choice_data, garbage)
 
         if not backend:
             logger.info("%s failed too many attempts. Disconnecting", client_address)
