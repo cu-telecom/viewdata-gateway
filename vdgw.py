@@ -29,11 +29,14 @@ TELNET_DONT = 0xFE
 TELNET_REFUSAL = {TELNET_WILL: TELNET_DONT, TELNET_DO: TELNET_WONT}
 
 # Viewdata/Prestel alphanumeric colour codes (ESC + code + 0x40)
+COLOUR_RED = "\x1B\x41"
 COLOUR_GREEN = "\x1B\x42"
 COLOUR_YELLOW = "\x1B\x43"
 COLOUR_BLUE = "\x1B\x44"
 COLOUR_WHITE = "\x1B\x47"
 NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was set just before it
+
+CONNECTION_FAILED_DISPLAY_SECONDS = 2
 
 # Real Viewdata terminals don't use plain ASCII: the physical "#" (hash) key
 # transmits 0x5F, and displaying ASCII 0x23 renders as something else ("$" on
@@ -183,12 +186,12 @@ def build_status_bar(text):
     return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{centred}"
 
 
-def build_connecting_frame():
-    """A blank frame with "CONNECTING" in green, centred on the page, shown while dialling a backend."""
+def build_message_frame(text, colour):
+    """A blank frame with `text` in `colour`, centred on the page - used for transient full-page messages."""
     rows = [pad_row('') for _ in range(FRAME_ROWS)]
     middle_row = FRAME_ROWS // 2
-    centred = center_in_row("CONNECTING", invisible_cells=1)  # green fg
-    rows[middle_row] = f"{COLOUR_GREEN}{centred}"  # exactly full width - no line-end needed
+    centred = center_in_row(text, invisible_cells=1)  # one leading colour code
+    rows[middle_row] = f"{colour}{centred}"  # exactly full width - no line-end needed
     rows.append(pad_row(''))  # status row
     return rows
 
@@ -290,7 +293,8 @@ banner_row_count = config.get("banner_rows", DEFAULT_BANNER_ROWS)
 banner = edittf_decode(config["banner_url"], row_begin=1, row_end=banner_row_count)
 all_backends = config["backend_servers"]
 pages = build_pages(banner, all_backends, banner_row_count)
-connecting_frame = render_frame(build_connecting_frame())
+connecting_frame = render_frame(build_message_frame("CONNECTING", COLOUR_GREEN))
+connection_failed_frame = render_frame(build_message_frame("CONNECTION FAILED", COLOUR_RED))
 
 max_connections = config.get("max_connections", DEFAULT_MAX_CONNECTIONS)
 choice_timeout = config.get("choice_timeout", DEFAULT_CHOICE_TIMEOUT)
@@ -435,7 +439,11 @@ async def serve_client(reader, writer, client_address):
         except (OSError, asyncio.TimeoutError) as e:
             logger.warning("%s couldn't connect to %s:%s - %s", client_address, backend['host'], backend['port'], e)
             writer.write(b"\x0c")
-            writer.write(render_frame(with_status_row(pages[current_page], "Connection failed. Try another")))
+            writer.write(connection_failed_frame)
+            await writer.drain()
+            await asyncio.sleep(CONNECTION_FAILED_DISPLAY_SECONDS)
+            writer.write(b"\x0c")
+            writer.write(render_frame(pages[current_page]))
             await writer.drain()
             continue
 
