@@ -255,12 +255,13 @@ def build_pages(banner, backends, banner_row_count):
 
     total = len(backends)
 
-    if total <= list_row_count:
+    # Always reserve at least one blank row as a gap before the input bar,
+    # plus one more for the "#) More" entry when there's more than one page.
+    if total <= list_row_count - 1:
         entries_per_page = total if total > 0 else 1
         show_footer = False
     else:
-        # reserve one row for the "#) More" entry
-        entries_per_page = max(1, list_row_count - 1)
+        entries_per_page = max(1, list_row_count - 2)
         show_footer = True
 
     num_pages = max(1, math.ceil(total / entries_per_page)) if total > 0 else 1
@@ -280,7 +281,7 @@ def build_pages(banner, backends, banner_row_count):
             rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR}) More"))
 
         blank_rows_needed = list_row_count - len(group) - (1 if show_footer else 0)
-        rows.extend(pad_row('') for _ in range(max(0, blank_rows_needed)))
+        rows.extend(pad_row('') for _ in range(max(1, blank_rows_needed)))
 
         rows.append(build_input_bar())  # status row - overwritten by with_status_row for errors
         pages.append(rows)
