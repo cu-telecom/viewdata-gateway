@@ -282,7 +282,8 @@ def build_pages(banner, backends, banner_row_count):
             rows.append(pad_row(f"{colour}{global_index:>{index_width}}) {backend['name']}"))
 
         if show_footer:
-            rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR}) More"))
+            more_colour = COLOUR_YELLOW if (start + len(group)) % 2 == 0 else COLOUR_WHITE
+            rows.append(pad_row(f"{more_colour}{HASH_CHAR:>{index_width}}) More"))
 
         blank_rows_needed = list_row_count - len(group) - (1 if show_footer else 0)
         rows.extend(pad_row('') for _ in range(max(1, blank_rows_needed)))
