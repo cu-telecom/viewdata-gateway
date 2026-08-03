@@ -38,9 +38,9 @@ backend_servers:
   - name: NXtel
     host: nx.nxtel.org
     port: 23280
-  - name: CCL4
-    host: fish.ccl4.org
-    port: 23
+  - name: The Gongpit
+    host: bbs.gongpit.com
+    port: 2323
   - name: Night Owl BBS
     host: nightowlbbs.ddns.net
     port: 6400

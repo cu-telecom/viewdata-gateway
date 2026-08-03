@@ -52,7 +52,7 @@ HASH_CHAR = '\x5f'
 MAX_DIGIT_BUFFER = 4  # generous headroom above any realistic backend count
 
 INPUT_PROMPT = f"Enter selection + {HASH_CHAR} : "
-HEADER_TITLE = "V D G W"  # visible text only, used for width/padding calculations
+HEADER_TITLE = "VDGW"  # visible text only, used for width/padding calculations - the colour codes themselves provide the spacing between letters
 
 
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
@@ -210,8 +210,8 @@ def build_input_bar():
 
 
 def build_header(current_page, num_pages):
-    """The row-0 header: "V D G W" on the left, each letter its own colour, "N/M" page indicator in yellow-on-black flush right."""
-    title = f"{COLOUR_GREEN}V {COLOUR_RED}D {COLOUR_CYAN}G {COLOUR_BLUE}W"
+    """The row-0 header: "VDGW" on the left, spaced by their own colour codes' invisible cells, "N/M" page indicator in yellow-on-black flush right."""
+    title = f"{COLOUR_GREEN}V{COLOUR_RED}D{COLOUR_CYAN}G{COLOUR_BLUE}W"
     indicator = f"{current_page + 1}/{num_pages}"
     left_invisible = 4  # one colour code per letter (green, red, cyan, blue)
     right_invisible = 3  # black background, steady, yellow fg for the indicator
@@ -324,7 +324,7 @@ config = load_config()
 # per-connection, since none of it changes at runtime and it's pure CPU work
 # with no benefit to redoing it for every client.
 banner_row_count = config.get("banner_rows", DEFAULT_BANNER_ROWS)
-banner = edittf_decode(config["banner_url"], row_begin=1, row_end=banner_row_count)
+banner = edittf_decode(config["banner_url"], row_begin=0, row_end=banner_row_count - 1)
 all_backends = config["backend_servers"]
 pages = build_pages(banner, all_backends, banner_row_count)
 connecting_frame = render_frame(build_message_frame("CONNECTING", COLOUR_GREEN))
