@@ -358,7 +358,10 @@ async def send_page(writer, current_page, frame=None):
     header = build_header(current_page, len(pages)).encode()
     if frame is None:
         frame = render_frame(pages[current_page])
-    writer.write(b"\x0c" + header + b"\x0c" + frame)
+    # No clear between header and frame: the header is exactly 40 visible
+    # cells wide, so it wraps into row 1 on its own - an extra \x0c here
+    # would clear/home the display again and wipe the header out.
+    writer.write(b"\x0c" + header + frame)
     await writer.drain()
 
 
