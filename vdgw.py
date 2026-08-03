@@ -39,17 +39,19 @@ NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was 
 BLACK_BACKGROUND = "\x1B\x5C"  # sets the background directly to black, independent of the current alpha colour
 STEADY = "\x1B\x49"  # cancels Flash - defensive, in case it was left set by something earlier
 
-INPUT_PROMPT = "Enter no. + # : "
-
 CONNECTION_FAILED_DISPLAY_SECONDS = 2
 
 # Real Viewdata terminals don't use plain ASCII: the physical "#" (hash) key
-# transmits 0x5F, and displaying ASCII 0x23 renders as something else ("$" on
-# at least one real client) rather than a hash. 0x5F round-trips correctly on
-# both input and display, so it's used for both here.
+# transmits 0x5F, and displaying ASCII 0x23 renders as something else (a "$"
+# or a "£" depending on the client) rather than a hash. 0x5F round-trips
+# correctly on both input and display, so it's used for both here - anywhere
+# a hash needs to be shown or matched, use HASH_CHAR/HASH_BYTE, never a
+# literal '#'.
 HASH_BYTE = b'\x5f'
 HASH_CHAR = '\x5f'
 MAX_DIGIT_BUFFER = 4  # generous headroom above any realistic backend count
+
+INPUT_PROMPT = f"Enter no. + {HASH_CHAR} : "
 
 
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
@@ -230,9 +232,9 @@ def build_pages(banner, backends, banner_row_count):
     """
     Builds one complete frame per page: 22 content rows (the banner, followed
     by an auto-generated list of backends ("N) name") numbered globally and
-    continuously across all pages - not restarting at each page - a blank
-    line and a "Press # for more options" footer when there's more than one page, and
-    blank padding), plus one further status bar row below them that shows the
+    continuously across all pages - not restarting at each page - a "#) More"
+    entry when there's more than one page, and blank padding), plus one
+    further status bar row below them that shows the
     input prompt (with typed digits echoed live after it - see serve_client)
     by default, or an error message when with_status_row() overrides it. The
     "N/M" page indicator itself lives in the header (see build_header), not
@@ -257,8 +259,8 @@ def build_pages(banner, backends, banner_row_count):
         entries_per_page = total if total > 0 else 1
         show_footer = False
     else:
-        # reserve a blank spacer row plus the footer row itself
-        entries_per_page = max(1, list_row_count - 2)
+        # reserve one row for the "#) More" entry
+        entries_per_page = max(1, list_row_count - 1)
         show_footer = True
 
     num_pages = max(1, math.ceil(total / entries_per_page)) if total > 0 else 1
@@ -274,12 +276,11 @@ def build_pages(banner, backends, banner_row_count):
             colour = COLOUR_YELLOW if global_index % 2 == 0 else COLOUR_WHITE
             rows.append(pad_row(f"{colour}{global_index}) {backend['name']}"))
 
-        blank_rows_needed = list_row_count - len(group) - (2 if show_footer else 0)
-        rows.extend(pad_row('') for _ in range(max(0, blank_rows_needed)))
-
         if show_footer:
-            rows.append(pad_row(''))  # spacer before the footer
-            rows.append(pad_row(f"{COLOUR_WHITE}Press {HASH_CHAR} for more options"))
+            rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR}) More"))
+
+        blank_rows_needed = list_row_count - len(group) - (1 if show_footer else 0)
+        rows.extend(pad_row('') for _ in range(max(0, blank_rows_needed)))
 
         rows.append(build_input_bar())  # status row - overwritten by with_status_row for errors
         pages.append(rows)
@@ -327,9 +328,9 @@ connection_semaphore = asyncio.Semaphore(max_connections)
 
 
 def generate_date_string():
-    # YYYYMMDDT00HHMMZ
+    # YYYYMMDD - date only, no time
     now = datetime.now(timezone.utc)
-    return now.strftime("%Y%m%dT00%H%MZ")
+    return now.strftime("%Y%m%d")
 
 
 async def relay(reader, writer):
