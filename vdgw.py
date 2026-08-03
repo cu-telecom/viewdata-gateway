@@ -37,8 +37,9 @@ COLOUR_BLUE = "\x1B\x44"
 COLOUR_WHITE = "\x1B\x47"
 NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was set just before it
 BLACK_BACKGROUND = "\x1B\x5C"  # sets the background directly to black, independent of the current alpha colour
+STEADY = "\x1B\x49"  # cancels Flash - defensive, in case it was left set by something earlier
 
-INPUT_PROMPT = "Enter selection: "
+INPUT_PROMPT = "Enter no. + # : "
 
 CONNECTION_FAILED_DISPLAY_SECONDS = 2
 
@@ -199,16 +200,16 @@ def build_input_bar():
     purely because the cursor advances with each transmitted character -
     no cursor-addressing escape sequence is used or needed.
     """
-    return f"{BLACK_BACKGROUND}{COLOUR_YELLOW}{INPUT_PROMPT}"
+    return f"{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{INPUT_PROMPT}"
 
 
 def build_header(current_page, num_pages):
     """The row-0 header: the date on the left, "N/M" page indicator in yellow-on-black flush right."""
     date_str = generate_date_string()
     indicator = f"{current_page + 1}/{num_pages}"
-    invisible = 2  # black background, yellow fg
+    invisible = 3  # black background, steady (cancels any lingering Flash), yellow fg
     padding = max(0, ROW_WIDTH - len(date_str) - invisible - len(indicator))
-    return f"{date_str}{' ' * padding}{BLACK_BACKGROUND}{COLOUR_YELLOW}{indicator}"
+    return f"{date_str}{' ' * padding}{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{indicator}"
 
 
 def build_message_frame(text, colour):
