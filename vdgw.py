@@ -29,12 +29,15 @@ TELNET_DONT = 0xFE
 TELNET_REFUSAL = {TELNET_WILL: TELNET_DONT, TELNET_DO: TELNET_WONT}
 
 # Viewdata/Prestel alphanumeric colour codes (ESC + code + 0x40)
+COLOUR_BLACK = "\x1B\x40"
 COLOUR_RED = "\x1B\x41"
 COLOUR_GREEN = "\x1B\x42"
 COLOUR_YELLOW = "\x1B\x43"
 COLOUR_BLUE = "\x1B\x44"
 COLOUR_WHITE = "\x1B\x47"
 NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was set just before it
+
+INPUT_PROMPT = "Enter selection: "
 
 CONNECTION_FAILED_DISPLAY_SECONDS = 2
 
@@ -186,6 +189,27 @@ def build_status_bar(text):
     return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{centred}"
 
 
+def build_input_bar():
+    """
+    The default bottom-bar content: a black-background, yellow-text prompt
+    with no padding or trailing line-end after it, so the cursor is left
+    sitting right after the prompt text. Digits the client then types are
+    echoed back as raw bytes in serve_client, appearing one after another
+    purely because the cursor advances with each transmitted character -
+    no cursor-addressing escape sequence is used or needed.
+    """
+    return f"{COLOUR_BLACK}{NEW_BACKGROUND}{COLOUR_YELLOW}{INPUT_PROMPT}"
+
+
+def build_header(current_page, num_pages):
+    """The row-0 header: the date on the left, "N/M" page indicator in yellow-on-black flush right."""
+    date_str = generate_date_string()
+    indicator = f"{current_page + 1}/{num_pages}"
+    invisible = 3  # black fg, new background, yellow fg
+    padding = max(0, ROW_WIDTH - len(date_str) - invisible - len(indicator))
+    return f"{date_str}{' ' * padding}{COLOUR_BLACK}{NEW_BACKGROUND}{COLOUR_YELLOW}{indicator}"
+
+
 def build_message_frame(text, colour):
     """A blank frame with `text` in `colour`, centred on the page - used for transient full-page messages."""
     rows = [pad_row('') for _ in range(FRAME_ROWS)]
@@ -206,9 +230,11 @@ def build_pages(banner, backends, banner_row_count):
     by an auto-generated list of backends ("N) name") numbered globally and
     continuously across all pages - not restarting at each page - a blank
     line and a "Press # for more options" footer when there's more than one page, and
-    blank padding), plus one further status bar row below them that shows a
-    centred "Page X of Y" indicator by default - or an error message,
-    when with_status_row() overrides it.
+    blank padding), plus one further status bar row below them that shows the
+    input prompt (with typed digits echoed live after it - see serve_client)
+    by default, or an error message when with_status_row() overrides it. The
+    "N/M" page indicator itself lives in the header (see build_header), not
+    on this row.
 
     Because numbering is global, a client can type a number they saw on a
     different page (e.g. "15") and it resolves correctly regardless of which
@@ -253,10 +279,7 @@ def build_pages(banner, backends, banner_row_count):
             rows.append(pad_row(''))  # spacer before the footer
             rows.append(pad_row(f"{COLOUR_WHITE}Press {HASH_CHAR} for more options"))
 
-        if num_pages > 1:
-            rows.append(build_status_bar(f"Page {page_index + 1} of {num_pages}"))
-        else:
-            rows.append(pad_row(''))  # status row (row 22), overwritten by with_status_row when needed
+        rows.append(build_input_bar())  # status row - overwritten by with_status_row for errors
         pages.append(rows)
 
     return pages
@@ -329,6 +352,15 @@ async def close_writer(writer):
         pass
 
 
+async def send_page(writer, current_page, frame=None):
+    """Sends the header (with an up-to-date page indicator) followed by a page frame, clearing first."""
+    header = build_header(current_page, len(pages)).encode()
+    if frame is None:
+        frame = render_frame(pages[current_page])
+    writer.write(b"\x0c" + header + b"\x0c" + frame)
+    await writer.drain()
+
+
 async def handle_client(reader, writer):
     client_address = "{}:{}".format(*writer.get_extra_info('peername'))
 
@@ -349,9 +381,7 @@ async def handle_client(reader, writer):
 async def serve_client(reader, writer, client_address):
     current_page = 0
 
-    writer.write(b"\x0c" + generate_date_string().encode() + b"\x0c")
-    writer.write(render_frame(pages[current_page]))
-    await writer.drain()
+    await send_page(writer, current_page)
 
     while True:  # Keep the outer loop for displaying the menu again
         attempts = 0
@@ -392,9 +422,7 @@ async def serve_client(reader, writer, client_address):
                     # Hash with nothing typed first means "show the next page"
                     current_page = (current_page + 1) % len(pages)
                     logger.info("%s moved to menu page %s/%s", client_address, current_page + 1, len(pages))
-                    writer.write(b"\x0c")
-                    writer.write(render_frame(pages[current_page]))
-                    await writer.drain()
+                    await send_page(writer, current_page)
                     continue
 
                 choice = int(digit_buffer)
@@ -405,14 +433,17 @@ async def serve_client(reader, writer, client_address):
                     break
                 else:
                     logger.info("%s entered an invalid choice: %s", client_address, choice)
-                    writer.write(b"\x0c")
-                    writer.write(render_frame(with_status_row(pages[current_page], "Invalid Choice. Try again")))
-                    await writer.drain()
+                    await send_page(writer, current_page, render_frame(with_status_row(pages[current_page], "Invalid Choice. Try again")))
                     attempts += 1
                 continue
 
             if choice_data.isdigit():
                 digit_buffer += choice_data.decode()
+                # Echoed as a raw byte - the cursor simply advances one cell per
+                # character, landing right after the input prompt built into
+                # the bottom bar (see build_input_bar), with no cursor-jump needed.
+                writer.write(choice_data)
+                await writer.drain()
                 if len(digit_buffer) > MAX_DIGIT_BUFFER:
                     digit_buffer = ""
                     garbage += 1
@@ -424,9 +455,7 @@ async def serve_client(reader, writer, client_address):
 
         if not backend:
             logger.info("%s failed too many attempts. Disconnecting", client_address)
-            writer.write(b"\x0c")
-            writer.write(render_frame(with_status_row(pages[current_page], "Too many failed attempts. Goodbye")))
-            await writer.drain()
+            await send_page(writer, current_page, render_frame(with_status_row(pages[current_page], "Too many failed attempts. Goodbye")))
             return
 
         writer.write(b"\x0c")
@@ -442,9 +471,7 @@ async def serve_client(reader, writer, client_address):
             writer.write(connection_failed_frame)
             await writer.drain()
             await asyncio.sleep(CONNECTION_FAILED_DISPLAY_SECONDS)
-            writer.write(b"\x0c")
-            writer.write(render_frame(pages[current_page]))
-            await writer.drain()
+            await send_page(writer, current_page)
             continue
 
         try:
