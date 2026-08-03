@@ -38,7 +38,7 @@ NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was 
 BLACK_BACKGROUND = "\x1B\x5C"  # sets the background directly to black, independent of the current alpha colour
 STEADY = "\x1B\x49"  # cancels Flash - defensive, in case it was left set by something earlier
 
-MESSAGE_DISPLAY_SECONDS = 2  # how long transient full-page messages (connecting, errors) stay up
+MESSAGE_DISPLAY_SECONDS = 4  # how long transient full-page messages (connecting, errors) stay up
 
 # Real Viewdata terminals don't use plain ASCII: the physical "#" (hash) key
 # transmits 0x5F, and displaying ASCII 0x23 renders as something else (a "$"
@@ -321,8 +321,8 @@ all_backends = config["backend_servers"]
 pages = build_pages(banner, all_backends, banner_row_count)
 connecting_frame = render_frame(build_message_frame("CONNECTING", COLOUR_GREEN))
 connection_failed_frame = render_frame(build_message_frame("CONNECTION FAILED", COLOUR_RED))
-invalid_selection_frame = render_frame(build_message_frame("Invalid selection", COLOUR_YELLOW))
-too_many_attempts_frame = render_frame(build_message_frame("Too many attempts", COLOUR_YELLOW))
+invalid_selection_frame = render_frame(build_message_frame("INVALID SELECTION", COLOUR_YELLOW))
+too_many_attempts_frame = render_frame(build_message_frame("TOO MANY ATTEMPTS", COLOUR_RED))
 
 max_connections = config.get("max_connections", DEFAULT_MAX_CONNECTIONS)
 choice_timeout = config.get("choice_timeout", DEFAULT_CHOICE_TIMEOUT)
