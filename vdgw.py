@@ -33,6 +33,7 @@ COLOUR_RED = "\x1B\x41"
 COLOUR_GREEN = "\x1B\x42"
 COLOUR_YELLOW = "\x1B\x43"
 COLOUR_BLUE = "\x1B\x44"
+COLOUR_CYAN = "\x1B\x46"
 COLOUR_WHITE = "\x1B\x47"
 NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was set just before it
 BLACK_BACKGROUND = "\x1B\x5C"  # sets the background directly to black, independent of the current alpha colour
@@ -51,7 +52,7 @@ HASH_CHAR = '\x5f'
 MAX_DIGIT_BUFFER = 4  # generous headroom above any realistic backend count
 
 INPUT_PROMPT = f"Enter selection + {HASH_CHAR} : "
-HEADER_TITLE = "viewdata gateway"
+HEADER_TITLE = "V D G W"  # visible text only, used for width/padding calculations
 
 
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
@@ -209,12 +210,13 @@ def build_input_bar():
 
 
 def build_header(current_page, num_pages):
-    """The row-0 header: the title on the left in yellow, "N/M" page indicator in yellow-on-black flush right."""
+    """The row-0 header: "V D G W" on the left, each letter its own colour, "N/M" page indicator in yellow-on-black flush right."""
+    title = f"{COLOUR_GREEN}V {COLOUR_RED}D {COLOUR_CYAN}G {COLOUR_BLUE}W"
     indicator = f"{current_page + 1}/{num_pages}"
-    left_invisible = 1  # yellow fg for the title
+    left_invisible = 4  # one colour code per letter (green, red, cyan, blue)
     right_invisible = 3  # black background, steady, yellow fg for the indicator
     padding = max(0, ROW_WIDTH - len(HEADER_TITLE) - left_invisible - right_invisible - len(indicator))
-    return f"{COLOUR_YELLOW}{HEADER_TITLE}{' ' * padding}{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{indicator}"
+    return f"{title}{' ' * padding}{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{indicator}"
 
 
 def build_message_frame(text, colour):
