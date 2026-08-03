@@ -3,7 +3,6 @@ import logging
 import math
 import signal
 import sys
-from datetime import datetime, timezone
 
 import yaml
 
@@ -51,7 +50,8 @@ HASH_BYTE = b'\x5f'
 HASH_CHAR = '\x5f'
 MAX_DIGIT_BUFFER = 4  # generous headroom above any realistic backend count
 
-INPUT_PROMPT = f"Enter no. + {HASH_CHAR} : "
+INPUT_PROMPT = f"Enter selection + {HASH_CHAR} : "
+HEADER_TITLE = "viewdata gateway"
 
 
 # Borrrowed from John Newcombe - https://bitbucket.org/johnnewcombe/telstar-server-1.0/src
@@ -195,23 +195,26 @@ def build_status_bar(text):
 
 def build_input_bar():
     """
-    The default bottom-bar content: a black-background, yellow-text prompt
+    The default bottom-bar content: a blue-background, yellow-text prompt
     with no padding or trailing line-end after it, so the cursor is left
     sitting right after the prompt text. Digits the client then types are
     echoed back as raw bytes in serve_client, appearing one after another
     purely because the cursor advances with each transmitted character -
-    no cursor-addressing escape sequence is used or needed.
+    no cursor-addressing escape sequence is used or needed. 3 attribute
+    codes (blue fg, new background, yellow fg) is the minimum possible for
+    a non-black background - there's no dedicated single-code shortcut for
+    blue the way there is for black.
     """
-    return f"{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{INPUT_PROMPT}"
+    return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{INPUT_PROMPT}"
 
 
 def build_header(current_page, num_pages):
-    """The row-0 header: the date on the left, "N/M" page indicator in yellow-on-black flush right."""
-    date_str = generate_date_string()
+    """The row-0 header: the title on the left in yellow, "N/M" page indicator in yellow-on-black flush right."""
     indicator = f"{current_page + 1}/{num_pages}"
-    invisible = 3  # black background, steady (cancels any lingering Flash), yellow fg
-    padding = max(0, ROW_WIDTH - len(date_str) - invisible - len(indicator))
-    return f"{date_str}{' ' * padding}{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{indicator}"
+    left_invisible = 1  # yellow fg for the title
+    right_invisible = 3  # black background, steady, yellow fg for the indicator
+    padding = max(0, ROW_WIDTH - len(HEADER_TITLE) - left_invisible - right_invisible - len(indicator))
+    return f"{COLOUR_YELLOW}{HEADER_TITLE}{' ' * padding}{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{indicator}"
 
 
 def build_message_frame(text, colour):
@@ -254,6 +257,7 @@ def build_pages(banner, backends, banner_row_count):
         sys.exit(1)
 
     total = len(backends)
+    index_width = len(str(total - 1)) if total > 0 else 1  # pad single-digit numbers to align with the widest one
 
     # Always reserve at least one blank row as a gap before the input bar,
     # plus one more for the "#) More" entry when there's more than one page.
@@ -275,7 +279,7 @@ def build_pages(banner, backends, banner_row_count):
         for offset, backend in enumerate(group):
             global_index = start + offset
             colour = COLOUR_YELLOW if global_index % 2 == 0 else COLOUR_WHITE
-            rows.append(pad_row(f"{colour}{global_index}) {backend['name']}"))
+            rows.append(pad_row(f"{colour}{global_index:>{index_width}}) {backend['name']}"))
 
         if show_footer:
             rows.append(pad_row(f"{COLOUR_WHITE}{HASH_CHAR}) More"))
@@ -326,12 +330,6 @@ connection_failed_frame = render_frame(build_message_frame("CONNECTION FAILED", 
 max_connections = config.get("max_connections", DEFAULT_MAX_CONNECTIONS)
 choice_timeout = config.get("choice_timeout", DEFAULT_CHOICE_TIMEOUT)
 connection_semaphore = asyncio.Semaphore(max_connections)
-
-
-def generate_date_string():
-    # YYYYMMDD - date only, no time
-    now = datetime.now(timezone.utc)
-    return now.strftime("%Y%m%d")
 
 
 async def relay(reader, writer):
