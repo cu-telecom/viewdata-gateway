@@ -215,8 +215,13 @@ def build_header(current_page, num_pages):
     indicator = f"{current_page + 1}/{num_pages}"
     left_invisible = 4  # one colour code per letter (green, red, cyan, blue)
     right_invisible = 3  # black background, steady, yellow fg for the indicator
-    padding = max(0, ROW_WIDTH - len(HEADER_TITLE) - left_invisible - right_invisible - len(indicator))
-    return f"{title}{' ' * padding}{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{indicator}"
+    # Deliberately 1 cell short of the full row width, ending with an explicit
+    # \r\n instead of relying on the terminal to auto-wrap after exactly 40
+    # cells - some terminals defer that wrap until the next character, and an
+    # explicit newline arriving right after can double-advance, producing an
+    # extra blank line before the frame content.
+    padding = max(0, (ROW_WIDTH - 1) - len(HEADER_TITLE) - left_invisible - right_invisible - len(indicator))
+    return f"{title}{' ' * padding}{BLACK_BACKGROUND}{STEADY}{COLOUR_YELLOW}{indicator}\r\n"
 
 
 def build_message_frame(text, colour):
