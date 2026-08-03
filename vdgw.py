@@ -15,7 +15,6 @@ DEFAULT_CHOICE_TIMEOUT = 120  # seconds a client has to pick a menu option / sen
 DEFAULT_BANNER_ROWS = 10
 ROW_WIDTH = 40
 FRAME_ROWS = 22  # usable content rows per frame (banner + auto-generated list)
-STATUS_ROW_INDEX = FRAME_ROWS  # status bar sits on its own line, just below the 22 content rows
 
 # Minimal Telnet (RFC 854) option negotiation, for clients that speak telnet
 # before falling back to raw Viewdata bytes. We don't support any options, so
@@ -39,7 +38,7 @@ NEW_BACKGROUND = "\x1B\x5D"  # sets the background to whatever alpha colour was 
 BLACK_BACKGROUND = "\x1B\x5C"  # sets the background directly to black, independent of the current alpha colour
 STEADY = "\x1B\x49"  # cancels Flash - defensive, in case it was left set by something earlier
 
-CONNECTION_FAILED_DISPLAY_SECONDS = 2
+MESSAGE_DISPLAY_SECONDS = 2  # how long transient full-page messages (connecting, errors) stay up
 
 # Real Viewdata terminals don't use plain ASCII: the physical "#" (hash) key
 # transmits 0x5F, and displaying ASCII 0x23 renders as something else (a "$"
@@ -164,13 +163,6 @@ def pad_row(text):
     return text
 
 
-def with_status_row(rows, text):
-    """Returns a copy of rows with the status row replaced by an (error) message, styled the same as the page indicator bar."""
-    updated = list(rows)
-    updated[STATUS_ROW_INDEX] = build_status_bar(text)
-    return updated
-
-
 def center_in_row(text, invisible_cells):
     """
     Centres `text` within a full ROW_WIDTH-cell row that's preceded by
@@ -186,12 +178,6 @@ def center_in_row(text, invisible_cells):
     left_gap = max(0, (total_gap - invisible_cells) // 2)
     right_gap = total_gap - left_gap
     return (' ' * left_gap) + text + (' ' * right_gap)
-
-
-def build_status_bar(text):
-    """A full-width, centred row on a blue background with yellow text."""
-    centred = center_in_row(text, invisible_cells=3)  # blue fg, new background, yellow fg
-    return f"{COLOUR_BLUE}{NEW_BACKGROUND}{COLOUR_YELLOW}{centred}"
 
 
 def build_input_bar():
@@ -244,11 +230,12 @@ def build_pages(banner, backends, banner_row_count):
     by an auto-generated list of backends ("N) name") numbered globally and
     continuously across all pages - not restarting at each page - a "#) More"
     entry when there's more than one page, and blank padding), plus one
-    further status bar row below them that shows the
-    input prompt (with typed digits echoed live after it - see serve_client)
-    by default, or an error message when with_status_row() overrides it. The
+    further bottom-bar row below them (see build_input_bar) showing the input
+    prompt, with typed digits echoed live after it - see serve_client. The
     "N/M" page indicator itself lives in the header (see build_header), not
-    on this row.
+    on this row. Errors (invalid selection, too many attempts) are shown as
+    their own transient full-page messages instead of overriding this row -
+    see invalid_selection_frame/too_many_attempts_frame in serve_client.
 
     Because numbering is global, a client can type a number they saw on a
     different page (e.g. "15") and it resolves correctly regardless of which
@@ -295,7 +282,7 @@ def build_pages(banner, backends, banner_row_count):
         blank_rows_needed = list_row_count - len(group) - (1 if show_footer else 0)
         rows.extend(pad_row('') for _ in range(max(1, blank_rows_needed)))
 
-        rows.append(build_input_bar())  # status row - overwritten by with_status_row for errors
+        rows.append(build_input_bar())  # bottom bar: input prompt with live digit echo
         pages.append(rows)
 
     return pages
@@ -334,6 +321,8 @@ all_backends = config["backend_servers"]
 pages = build_pages(banner, all_backends, banner_row_count)
 connecting_frame = render_frame(build_message_frame("CONNECTING", COLOUR_GREEN))
 connection_failed_frame = render_frame(build_message_frame("CONNECTION FAILED", COLOUR_RED))
+invalid_selection_frame = render_frame(build_message_frame("Invalid selection", COLOUR_YELLOW))
+too_many_attempts_frame = render_frame(build_message_frame("Too many attempts", COLOUR_YELLOW))
 
 max_connections = config.get("max_connections", DEFAULT_MAX_CONNECTIONS)
 choice_timeout = config.get("choice_timeout", DEFAULT_CHOICE_TIMEOUT)
@@ -446,7 +435,11 @@ async def serve_client(reader, writer, client_address):
                     break
                 else:
                     logger.info("%s entered an invalid choice: %s", client_address, choice)
-                    await send_page(writer, current_page, render_frame(with_status_row(pages[current_page], "Invalid Choice. Try again")))
+                    writer.write(b"\x0c")
+                    writer.write(invalid_selection_frame)
+                    await writer.drain()
+                    await asyncio.sleep(MESSAGE_DISPLAY_SECONDS)
+                    await send_page(writer, current_page)
                     attempts += 1
                 continue
 
@@ -468,7 +461,10 @@ async def serve_client(reader, writer, client_address):
 
         if not backend:
             logger.info("%s failed too many attempts. Disconnecting", client_address)
-            await send_page(writer, current_page, render_frame(with_status_row(pages[current_page], "Too many failed attempts. Goodbye")))
+            writer.write(b"\x0c")
+            writer.write(too_many_attempts_frame)
+            await writer.drain()
+            await asyncio.sleep(MESSAGE_DISPLAY_SECONDS)
             return
 
         writer.write(b"\x0c")
@@ -483,7 +479,7 @@ async def serve_client(reader, writer, client_address):
             writer.write(b"\x0c")
             writer.write(connection_failed_frame)
             await writer.drain()
-            await asyncio.sleep(CONNECTION_FAILED_DISPLAY_SECONDS)
+            await asyncio.sleep(MESSAGE_DISPLAY_SECONDS)
             await send_page(writer, current_page)
             continue
 
