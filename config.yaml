@@ -16,7 +16,7 @@ banner_url: https://zxnet.co.uk/teletext/editor/#0:QIECBAgQIECBAgQIECBAgQIECBAgQ
 # Number of rows (from the top) the banner occupies. The remaining rows
 # (up to row 21) are used for the auto-generated backend list, and row 22
 # is always reserved for status messages. Optional, defaults to 10.
-banner_rows: 6
+banner_rows: 5
 
 # List of backend Viewdata/BBS services offered on the menu. Each page shows
 # up to 10 of these, digit-labelled in order; if there are more than fit on
