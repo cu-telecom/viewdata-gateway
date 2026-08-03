@@ -324,7 +324,7 @@ config = load_config()
 # per-connection, since none of it changes at runtime and it's pure CPU work
 # with no benefit to redoing it for every client.
 banner_row_count = config.get("banner_rows", DEFAULT_BANNER_ROWS)
-banner = edittf_decode(config["banner_url"], row_begin=0, row_end=banner_row_count - 1)
+banner = edittf_decode(config["banner_url"], row_begin=1, row_end=banner_row_count)
 all_backends = config["backend_servers"]
 pages = build_pages(banner, all_backends, banner_row_count)
 connecting_frame = render_frame(build_message_frame("CONNECTING", COLOUR_GREEN))
